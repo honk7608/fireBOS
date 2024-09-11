@@ -1,22 +1,78 @@
 import numpy as np
 import cv2
 import PIL.Image                                                                # Avoid namespace issues
-import time
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import math as m
 import copy
+from datetime import datetime
 from normxcorr2 import normxcorr2
 
 xMax = 1280
 yMax = 720
+cropI = [0, 0, xMax, yMax]
 
-cropI = [0, 0, 1280, 720]
+thresh = 5
+windowS = 8
+searchS = 16
 
-def convertImage(img):
+contourType = 'Tot'
+colorMap = 'plasma'
+alphaVal = 0.6
+plotShow = [0, False, True, False, True, True]
+
+quivX = None
+quivY = None
+quivU = None
+quivV = None
+quivVel = None
+
+camIndex = 1
+
+### Image Capture ###
+
+def CaptureImage():
+    global FirstFrame, LastFrame, OrigImage
+    capture = cv2.VideoCapture(camIndex)
+                            
+    capture.set(cv2.CAP_PROP_FRAME_WIDTH, xMax)
+    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, yMax)
+
+    while cv2.waitKey(33) < 0:
+        ret, frame = capture.read()
+        cv2.imshow("VideoFrame", frame)
+
+    ret, FirstFrame = capture.read()
+    cv2.imshow("FirstFrame", FirstFrame)
+
+    while cv2.waitKey(33) < 0:
+        ret, frame = capture.read()
+        cv2.imshow("VideoFrame", frame)
+
+    ret, LastFrame = capture.read()
+
+    image_path = './img/' + datetime.now().strftime("%m.%d[T-%H%M%S]") + f'[SET-{windowS}.{searchS}.{thresh}]'
+
+    capture.release()
+    cv2.destroyAllWindows()
+
+    cv2.imwrite(image_path +  '-1.jpg', FirstFrame)
+    cv2.imwrite(image_path +  '-2.jpg', LastFrame)
+
+    FirstFrame = ConvertImage(FirstFrame)
+    LastFrame = ConvertImage(LastFrame)
+
+    OrigImage = LastFrame
+
+    FirstFrame = FirstFrame.convert("L")
+    LastFrame = LastFrame.convert("L")
+def ConvertImage(img):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return PIL.Image.fromarray(img)
-def pushCompute(I1Compute, I2Compute, wSize, sSize):
+
+### Compute ###
+
+def Compute(I1Compute, I2Compute, wSize, sSize):
         
     numRows_I = I1Compute.size[1]                                           # Number of rows of the image
     numCols_I = I1Compute.size[0]                                           # Number of columns of the image
@@ -102,7 +158,11 @@ def pushCompute(I1Compute, I2Compute, wSize, sSize):
                     dR   = numR/denR
                 numC = m.log(c[cPeak-1][rPeak]) - m.log(c[cPeak+1][rPeak])
                 denC = 2*m.log(c[cPeak-1][rPeak]) - 4*m.log(c[cPeak][rPeak]) + 2*m.log(c[cPeak+1][rPeak])
-                dC   = numC/denC
+                try:
+                    dC   = numC/denC
+                except ZeroDivisionError:
+                    denC = 0.00000000001
+                    dC   = numC/denC
             
                 # Find the peak indices of the cross-correlation map
                 colPeak[i][j] = cPeak + dC
@@ -122,59 +182,8 @@ def pushCompute(I1Compute, I2Compute, wSize, sSize):
 
     return colOffset, rowOffset, CC, RR, XX, YY
 
-index = 0
-# while 1:
-#     capture = cv2.VideoCapture(index)
-#     capture.set(cv2.CAP_PROP_FRAME_WIDTH, xMax)
-#     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, yMax)
-#     while cv2.waitKey(33) < 0:
-#         ret, frame = capture.read()
-#         cv2.imshow("VideoFrame", frame)
-#     print("Index :", index)
-#     if input('> ') == 1:
-#         break
-#     print("")
-#     capture.release()
-#     cv2.destroyAllWindows()
-#     index += 1
+### PLOT ###
 
-capture = cv2.VideoCapture(1)
-                        
-capture.set(cv2.CAP_PROP_FRAME_WIDTH, xMax)
-capture.set(cv2.CAP_PROP_FRAME_HEIGHT, yMax)
-
-while cv2.waitKey(33) < 0:
-    ret, frame = capture.read()
-    cv2.imshow("VideoFrame", frame)
-
-ret, FirstFrame = capture.read()
-cv2.imshow("FirstFrame", FirstFrame)
-
-while cv2.waitKey(33) < 0:
-    ret, frame = capture.read()
-    cv2.imshow("VideoFrame", frame)
-
-ret, ReadFrame = capture.read()
-
-capture.release()
-cv2.destroyAllWindows()
-
-FirstFrame = convertImage(FirstFrame)
-ReadFrame = convertImage(ReadFrame)
-
-I2Orig = ReadFrame
-
-FirstFrame = FirstFrame.convert("L")
-ReadFrame = ReadFrame.convert("L")
-
-colOffset, rowOffset, CC, RR, XX, YY = pushCompute(FirstFrame, ReadFrame, 4, 8)
-
-
-# Set Plot Option
-contourType = 'Tot'
-colorMap = 'jet'
-alphaVal = 0.6
-plotShow = [0, False, True, False, False, True]
 def SetPlotOpt():
     global contourType, colorMap, alphaVal, plotShow
     print(f'\nSet colormap type.\nInput 0 for plasma, 1 for jet, 2 for bone, 3 for viridis:')
@@ -211,19 +220,10 @@ def SetPlotOpt():
             contourType = ["X", "Y", "Tot"][k]
             
         print("\n")
-
-# Show Plot
-quivX = None
-quivY = None
-quivU = None
-quivV = None
-quivVel = None
-
-def PlotData(thresh):
+def SetPlotData(thresh):
     global quivX, quivY, quivU, quivV, quivVel
 
-    # Get relevant instance variables
-    # thresh   = 5                          
+    # Get relevant instance variables          
     quivX    = copy.deepcopy(CC)                                       # Set X-values from column meshgrid
     quivY    = copy.deepcopy(RR)                                       # Set Y-values from row meshgrid
     quivU    = copy.deepcopy(rowOffset)                                  # Set U-displacement from row offset
@@ -237,9 +237,7 @@ def PlotData(thresh):
     quivU[quivVel == testVal]   = np.nan                                    # Apply threshold to X displacement
     quivV[quivVel == testVal]   = np.nan                                    # Apply threshold to Y displacement
     quivVel[quivVel == testVal] = np.nan                                    # Apply threshold to total displacement
-
-# 1: velocity
-def Plot1():
+def Plot1(): # 1: velocity
 
     plt.figure(1)                                                       # Select figure 4
     plt.close(1)                                                        # Close the figure
@@ -252,16 +250,15 @@ def Plot1():
     plt.gca().invert_yaxis()                                            # Invert the Y-axis (to compare to MATLAB)
     plt.gca().set_aspect('equal')                                       # Set the axes to equal size
     plt.title("Displacement Vectors")                                   # Set plot title
-
-# 2: contour
-def Plot2():
+def Plot2(): # 2: contour
+    global OrigImage
 
     plt.figure(2)                                                       # Select figure 5
     plt.close(2)                                                        # Close figure 5
     fig2 = plt.figure(2)                                           # Select appropriate figure
     ax2  = fig2.add_subplot(111, aspect='equal')
     plt.cla()                                                           # Clear the axes
-    plt.imshow(I2Orig, cmap = "gray")                              # Plot the original Image 2
+    plt.imshow(OrigImage, cmap = "gray")                              # Plot the original Image 2
     
     # Create a Rectangle patch
     rect = patches.Rectangle((cropI[0], cropI[1]),             # Create rectangle to show sub-region on image
@@ -284,10 +281,7 @@ def Plot2():
                 alpha = alphaVal,
                 antialiased = True)
     plt.colorbar()                                                      # Display the colorbar
-
-# 3: XDis
-def Plot3():
-
+def Plot3(): # 3: XDis
     plt.figure(3)                                                       # Select figure 6
     plt.close(3)                                                        # Close the figure
     plt.figure(3)                                                       # Select appropriate figure
@@ -298,10 +292,7 @@ def Plot3():
     plt.gca().set_aspect('equal')                                       # Set the axes equal
     plt.colorbar()                                                      # Show the colorbar
     plt.title('X Displacement')                                         # Set the plot title
-
-# 4: YDis
-def Plot4():
-
+def Plot4(): # 4: YDis
     plt.figure(4)                                                       # Select figure 7
     plt.close(4)                                                        # Close the figure
     plt.figure(4)                                                       # Select appropriate figure
@@ -312,9 +303,7 @@ def Plot4():
     plt.gca().set_aspect('equal')                                       # Set the axes equal
     plt.colorbar()                                                      # Show the colorbar
     plt.title('Y Displacement')                                         # Set the plot title
-
-# 5: TotDis
-def Plot5():
+def Plot5(): # 5: TotDis
 
     plt.figure(5)                                                       # Select figure 8
     plt.close(5)                                                        # Close figure 8
@@ -326,39 +315,30 @@ def Plot5():
     plt.gca().set_aspect('equal')                                       # Set the axes equal
     plt.colorbar()                                                      # Show the colorbar
     plt.title('Total Displacement')                                     # Set the plot title
-
-def showPlot():
+def ShowPlot():
     if(plotShow[1]):
         Plot1()                                                   
         plt.figure(1)
         plt.show()
-        # print("Press ENTER to see next plot.")
-        # input('> ')
     if(plotShow[2]):
         Plot2()
         plt.figure(2)
         plt.show()
-        # print("Press ENTER to see next plot.")
-        # input('> ')
     if(plotShow[3]):
         Plot3()
         plt.figure(3)
         plt.show()
-        # print("Press ENTER to see next plot.", end='')
-        # input('> ')
     if(plotShow[4]):
         Plot4()        
         plt.figure(4)
         plt.show()
-        # print("Press ENTER to see next plot.", end='')
-        # input('> ')
     if(plotShow[5]):
         Plot5()
         plt.figure(5)
         plt.show()
-        # print("Press ENTER to see next plot.", end='')
-        # input('> ')
 
+CaptureImage()
+colOffset, rowOffset, CC, RR, XX, YY = Compute(FirstFrame, LastFrame, windowS, searchS)
 # SetPlotOpt()
-PlotData(5)
-showPlot()
+SetPlotData(thresh)
+ShowPlot()

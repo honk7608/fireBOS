@@ -1,8 +1,20 @@
+# BOS Cross-Correlation - v6
+# Written by: JoshTheEngineer
+# Website   : www.joshtheengineer.com
+# YouTube   : www.youtube.com/joshtheengineer
+# Started: 09/10/19
+# Updated: 09/10/19 - Started code
+#                   - Works as expected
+#          09/15/19 - Added image sub-region selection functionality
+#                   - Added comments
+#          09/18/19 - Added some capabilities
+#          09/19/19 - Added deep copying to allow thresholding to work
+
 # Import stuff for computations and plotting
 import numpy as np
 import math as m
 import copy
-from PIL import Image                    # Avoid namespace issues
+import PIL.Image                                                                # Avoid namespace issues
 import matplotlib.pyplot as plt
 from normxcorr2 import normxcorr2
 import matplotlib.patches as patches
@@ -414,7 +426,7 @@ class GUI_BOS:
 #                                                            ("PNG Files", "*.png"),
 #                                                            ("TIF Files", "*.tif;*.tiff"),
 #                                                            ("BMP Files", "*.bmp")))
-        self.I1 = Image.open(file_path)                                     # Open the image
+        self.I1 = PIL.Image.open(file_path)                                     # Open the image
         self.textImage1File.delete(0,END)                                       # Delete any strings in text box for file name
         self.textImage1File.insert(0,file_path)                                 # Add file name to the text box
         self.I1Orig = self.I1                                                   # Save original image for plotting
@@ -444,7 +456,7 @@ class GUI_BOS:
 #                                                            ("PNG Files", "*.png"),
 #                                                            ("TIF Files", "*.tif;*.tiff"),
 #                                                            ("BMP Files", "*.bmp")))
-        self.I2 = Image.open(file_path)                                     # Open the image
+        self.I2 = PIL.Image.open(file_path)                                     # Open the image
         self.textImage2File.delete(0,END)                                       # Delete any strings in text box for file name
         self.textImage2File.insert(0,file_path)                                 # Add file name to the text box
         self.I2Orig = self.I2                                                   # Save original image for plotting
@@ -574,8 +586,8 @@ class GUI_BOS:
         if (self.chkUseSubRegion.get()):                                        # If user wants to use a cropped region
             I1Crop    = np.array(self.I1.crop(self.cropI))                      # Crop image 1
             I2Crop    = np.array(self.I2.crop(self.cropI))                      # Crop image 2
-            I1Compute = Image.fromarray(I1Crop)                             # Convert back from array to image
-            I2Compute = Image.fromarray(I2Crop)                             # Convert back from array to image
+            I1Compute = PIL.Image.fromarray(I1Crop)                             # Convert back from array to image
+            I2Compute = PIL.Image.fromarray(I2Crop)                             # Convert back from array to image
         else:                                                                   # If user does not want to use a cropped region
             I1Compute = self.I1                                                 # Don't crop original image 1
             I2Compute = self.I2                                                 # Don't crop original image 2
@@ -656,7 +668,7 @@ class GUI_BOS:
                         cPeak = cPeak + 1                                       # Add one to column peak
                     if (cPeak == cC-1):                                         # If column peak is one less than size of CC-matrix columns
                         cPeak = cC - 2                                          # Subtract one from column peak
-                                
+                
                     # Sub-pixel peak point (3-point Gaussian)
                     numR = m.log(c[cPeak][rPeak-1]) - m.log(c[cPeak][rPeak+1])
                     denR = 2*m.log(c[cPeak][rPeak-1]) - 4*m.log(c[cPeak][rPeak]) + 2*m.log(c[cPeak][rPeak+1])
