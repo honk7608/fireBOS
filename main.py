@@ -5,8 +5,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import math as m
 import copy
+import os
+import time
 from datetime import datetime
 from normxcorr2 import normxcorr2
+
+print("- Initializing (", end='')
 
 xMax = 1280
 yMax = 720
@@ -16,7 +20,7 @@ thresh = 5
 windowS = 8
 searchS = 16
 
-contourType = 'Tot'
+contourType = 'Total'
 colorMap = 'plasma'
 alphaVal = 0.6
 plotShow = [0, False, True, False, True, True]
@@ -29,10 +33,18 @@ quivVel = None
 
 camIndex = 1
 
+image_path = './img/' + datetime.now().strftime("%m.%d[T-%H%M%S]") + f'[SET-{windowS}.{searchS}.{thresh}]/'
+if not os.path.exists(image_path):
+    os.makedirs(image_path)
+
+print("Done.)")
+
 ### Image Capture ###
 
 def CaptureImage():
-    global FirstFrame, LastFrame, OrigImage
+    global FirstFrame, LastFrame, OrigImage, image_path
+    print("- Capturing (", end='')
+    
     capture = cv2.VideoCapture(camIndex)
                             
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, xMax)
@@ -51,13 +63,11 @@ def CaptureImage():
 
     ret, LastFrame = capture.read()
 
-    image_path = './img/' + datetime.now().strftime("%m.%d[T-%H%M%S]") + f'[SET-{windowS}.{searchS}.{thresh}]'
-
     capture.release()
     cv2.destroyAllWindows()
 
-    cv2.imwrite(image_path +  '-1.jpg', FirstFrame)
-    cv2.imwrite(image_path +  '-2.jpg', LastFrame)
+    a = cv2.imwrite(image_path +  'Image 1.jpg', FirstFrame)
+    b = cv2.imwrite(image_path +  'Image 2.jpg', LastFrame)
 
     FirstFrame = ConvertImage(FirstFrame)
     LastFrame = ConvertImage(LastFrame)
@@ -66,6 +76,8 @@ def CaptureImage():
 
     FirstFrame = FirstFrame.convert("L")
     LastFrame = LastFrame.convert("L")
+
+    print(f"Done. Saved: {a and b})")
 def ConvertImage(img):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return PIL.Image.fromarray(img)
@@ -73,7 +85,8 @@ def ConvertImage(img):
 ### Compute ###
 
 def Compute(I1Compute, I2Compute, wSize, sSize):
-        
+    print("- Computing:")
+
     numRows_I = I1Compute.size[1]                                           # Number of rows of the image
     numCols_I = I1Compute.size[0]                                           # Number of columns of the image
     
@@ -98,7 +111,8 @@ def Compute(I1Compute, I2Compute, wSize, sSize):
     
     # Loop
     for i in range(len(wIndR)):                                             # Loop over all row window centers
-        print("Iteration: ",i,"/",len(wIndR)-1)                             # Print current iteration to console
+        print(f"  - Iteration {i}/{len(wIndR)-1} (", end='')                             # Print current iteration to console
+        clean = True
         for j in range(len(wIndC)):                                         # Loop over all column window centers
             
             # Get window centers
@@ -123,7 +137,8 @@ def Compute(I1Compute, I2Compute, wSize, sSize):
             
             if (I1_Sub_SameVals or I2_Sub_SameVals):                        # If values in either matrix are all the same
                 # print('I1_Sub/I2_Sub has same values in entire matrix!')    # Print notice (not an error)
-                print(">")
+                print(".",end='')
+                clean = False
                 rPeak = 0                                                   # Set row peak to zero
                 cPeak = 0                                                   # Set column peak to zero
                 dR    = 0                                                   # Set sub-pixel row delta to zero
@@ -171,7 +186,7 @@ def Compute(I1Compute, I2Compute, wSize, sSize):
                 # Find the pixel offsets for X and Y directions
                 colOffset[i][j] = colPeak[i][j] - wSize2 - sSize2 + 1           # Correct the column pixel shift for window and search sizes
                 rowOffset[i][j] = rowPeak[i][j] - wSize2 - sSize2 + 1           # Correct the row pixel shift for window and search sizes
-        
+
         # Move the contour plot over the image to correct location
         XX     = CC - np.min(CC)                                                # Shift X-values to origin of image
         YY     = RR - np.min(RR)                                                # Shift Y-values to origin of image
@@ -179,6 +194,10 @@ def Compute(I1Compute, I2Compute, wSize, sSize):
         scaleY = (cropI[3] - cropI[1])/np.max(YY)                     # Scale Y-value to get sub-region correct size
         XX     = XX*scaleX + cropI[0]                                      # Shift the X-values to the sub-region
         YY     = YY*scaleY + cropI[1]                                      # Shift the Y-values to the sub-region
+        
+        if not clean:
+            print(", ", end='')
+        print("Done.)")
 
     return colOffset, rowOffset, CC, RR, XX, YY
 
@@ -217,7 +236,7 @@ def SetPlotOpt():
             while (not (0 <= k <= 2)):
                 print(f'Set displacement for contour.\nInput 0 for X, 1 for Y, 2 for Total:')
                 k = int(input('> '))
-            contourType = ["X", "Y", "Tot"][k]
+            contourType = ["X", "Y", "Total"][k]
             
         print("\n")
 def SetPlotData(thresh):
@@ -237,8 +256,18 @@ def SetPlotData(thresh):
     quivU[quivVel == testVal]   = np.nan                                    # Apply threshold to X displacement
     quivV[quivVel == testVal]   = np.nan                                    # Apply threshold to Y displacement
     quivVel[quivVel == testVal] = np.nan                                    # Apply threshold to total displacement
+def Plot(k):
+    if k == 1:
+        Plot1()
+    if k == 2:
+        Plot2()
+    if k == 3:
+        Plot3()
+    if k == 4:
+        Plot4()
+    if k == 5:
+        Plot5()
 def Plot1(): # 1: velocity
-
     plt.figure(1)                                                       # Select figure 4
     plt.close(1)                                                        # Close the figure
     plt.figure(1)                                                       # Select appropriate figure
@@ -272,7 +301,7 @@ def Plot2(): # 2: contour
         target = quivU
     elif (contourType == "Y"):           
         target = quivV                                  
-    elif (contourType == "Tot"):         
+    elif (contourType == "Total"):         
         target = quivVel
     
     plt.contourf(XX,YY,target,100,                      
@@ -281,6 +310,7 @@ def Plot2(): # 2: contour
                 alpha = alphaVal,
                 antialiased = True)
     plt.colorbar()                                                      # Display the colorbar
+    plt.title(f"{contourType} Displacement (Contour)")                                   # Set plot title
 def Plot3(): # 3: XDis
     plt.figure(3)                                                       # Select figure 6
     plt.close(3)                                                        # Close the figure
@@ -304,9 +334,8 @@ def Plot4(): # 4: YDis
     plt.colorbar()                                                      # Show the colorbar
     plt.title('Y Displacement')                                         # Set the plot title
 def Plot5(): # 5: TotDis
-
-    plt.figure(5)                                                       # Select figure 8
-    plt.close(5)                                                        # Close figure 8
+    plt.figure(5)                                                       # Select figure
+    plt.close(5)                                                        # Close figure
     plt.figure(5)                                                       # Select appropriate figure
     plt.cla()                                                           # Clear the axes
     plt.contourf(quivX,quivY,quivVel,100,                               # Plot the total displacement contour
@@ -316,29 +345,28 @@ def Plot5(): # 5: TotDis
     plt.colorbar()                                                      # Show the colorbar
     plt.title('Total Displacement')                                     # Set the plot title
 def ShowPlot():
-    if(plotShow[1]):
-        Plot1()                                                   
-        plt.figure(1)
-        plt.show()
-    if(plotShow[2]):
-        Plot2()
-        plt.figure(2)
-        plt.show()
-    if(plotShow[3]):
-        Plot3()
-        plt.figure(3)
-        plt.show()
-    if(plotShow[4]):
-        Plot4()        
-        plt.figure(4)
-        plt.show()
-    if(plotShow[5]):
-        Plot5()
-        plt.figure(5)
-        plt.show()
+    global image_path
+
+    plotType = [0, 'Velocity', 'Contour', 'X Displacement', 'Y Displacement', 'Total Displacement']
+
+    print("- Saving Plots (", end='')
+
+    for i in range(1, 6):
+        Plot(i)
+        if(plotShow[i]):
+            if i != 1:
+                plt.close(1)
+            plt.show()
+        plt.savefig(image_path + f"Plot - {plotType[i]}.jpg")
+        plt.close(i)
+        print(f"{i}, ", end='')
+        time.sleep(0.5)
+    print("Done.)")
 
 CaptureImage()
 colOffset, rowOffset, CC, RR, XX, YY = Compute(FirstFrame, LastFrame, windowS, searchS)
 # SetPlotOpt()
 SetPlotData(thresh)
 ShowPlot()
+
+print("\nDone.")
