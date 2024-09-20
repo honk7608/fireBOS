@@ -12,8 +12,8 @@ from normxcorr2 import normxcorr2
 
 print("- Initializing (", end='')
 
-xMax = 1280
-yMax = 720
+xMax = 1920
+yMax = 1080
 cropI = [0, 0, xMax, yMax]
 
 thresh = 5
@@ -23,7 +23,7 @@ searchS = 16
 contourType = 'Total'
 colorMap = 'plasma'
 alphaVal = 0.6
-plotShow = [0, False, True, False, True, True]
+plotShow = [0, False, False, False, False, False]
 
 quivX = None
 quivY = None
@@ -32,6 +32,7 @@ quivV = None
 quivVel = None
 
 camIndex = 1
+camFocus = 50
 
 image_path = './img/' + datetime.now().strftime("%m.%d[T-%H%M%S]") + f'[SET-{windowS}.{searchS}.{thresh}]/'
 if not os.path.exists(image_path):
@@ -42,26 +43,46 @@ print("Done.)")
 ### Image Capture ###
 
 def CaptureImage():
-    global FirstFrame, LastFrame, OrigImage, image_path
-    print("- Capturing (", end='')
+    global FirstFrame, LastFrame, OrigImage, image_path, camFocus
     
-    capture = cv2.VideoCapture(camIndex)
+    capture = cv2.VideoCapture(camIndex, cv2.CAP_DSHOW)
                             
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, xMax)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, yMax)
+    capture.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+    capture.set(cv2.CAP_PROP_FOCUS, camFocus)
+    
+    print(f"- Capturing")
+    print(f"  - Index : {camIndex}")
+    print(f"  - Resolution : {capture.get(cv2.CAP_PROP_FRAME_WIDTH)} * {capture.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
+    print(f"  - Focus : {capture.get(cv2.CAP_PROP_FOCUS)}")
 
-    while cv2.waitKey(33) < 0:
+    while True:
+        inputKey = cv2.waitKey(33) 
+        if inputKey == ord("["):
+            camFocus -= 5
+            capture.set(cv2.CAP_PROP_FOCUS, camFocus)
+            print(f"          → {capture.get(cv2.CAP_PROP_FOCUS)}")
+        if inputKey == ord("]"):
+            camFocus += 5
+            capture.set(cv2.CAP_PROP_FOCUS, camFocus)
+            print(f"          → {capture.get(cv2.CAP_PROP_FOCUS)}")
+        if inputKey == 13: #Enter
+            break
         ret, frame = capture.read()
         cv2.imshow("VideoFrame", frame)
 
     ret, FirstFrame = capture.read()
     cv2.imshow("FirstFrame", FirstFrame)
 
-    while cv2.waitKey(33) < 0:
+    print(f"  - Image 1 Captured")
+
+    while inputKey != 13: #Enter
         ret, frame = capture.read()
         cv2.imshow("VideoFrame", frame)
 
     ret, LastFrame = capture.read()
+    print(f"  - Image 2 Captured")
 
     capture.release()
     cv2.destroyAllWindows()
@@ -77,7 +98,7 @@ def CaptureImage():
     FirstFrame = FirstFrame.convert("L")
     LastFrame = LastFrame.convert("L")
 
-    print(f"Done. Saved: {a and b})")
+    print(f"  - Saved: {a and b}")
 def ConvertImage(img):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return PIL.Image.fromarray(img)
@@ -85,7 +106,9 @@ def ConvertImage(img):
 ### Compute ###
 
 def Compute(I1Compute, I2Compute, wSize, sSize):
-    print("- Computing:")
+    print("- Computing")
+    print(f"  - Window Size : {wSize}")
+    print(f"  - Search Size : {sSize}")
 
     numRows_I = I1Compute.size[1]                                           # Number of rows of the image
     numCols_I = I1Compute.size[0]                                           # Number of columns of the image
@@ -349,19 +372,18 @@ def ShowPlot():
 
     plotType = [0, 'Velocity', 'Contour', 'X Displacement', 'Y Displacement', 'Total Displacement']
 
-    print("- Saving Plots (", end='')
+    print("- Saving Plots")
 
     for i in range(1, 6):
         Plot(i)
+        plt.savefig(image_path + f"Plot - {plotType[i]}.jpg")
+        print(f"  - [{i}] {plotType[i]}")
         if(plotShow[i]):
             if i != 1:
                 plt.close(1)
             plt.show()
-        plt.savefig(image_path + f"Plot - {plotType[i]}.jpg")
         plt.close(i)
-        print(f"{i}, ", end='')
         time.sleep(0.5)
-    print("Done.)")
 
 CaptureImage()
 colOffset, rowOffset, CC, RR, XX, YY = Compute(FirstFrame, LastFrame, windowS, searchS)
@@ -369,4 +391,4 @@ colOffset, rowOffset, CC, RR, XX, YY = Compute(FirstFrame, LastFrame, windowS, s
 SetPlotData(thresh)
 ShowPlot()
 
-print("\nDone.")
+print("\nEnd of Program.")
