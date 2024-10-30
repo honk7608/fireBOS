@@ -12,8 +12,8 @@ from normxcorr2 import normxcorr2
 
 print("- Initializing (", end='')
 
-xMax = 1920
-yMax = 1080
+xMax = 3840 #6000 #1920
+yMax = 2160 #4000 #1080
 cropI = [0, 0, xMax, yMax]
 
 thresh = 5
@@ -31,8 +31,11 @@ quivU = None
 quivV = None
 quivVel = None
 
-camIndex = 1
-camFocus = 50
+camIndex = 0
+camFocus = 220
+
+Frames = [0]
+cnt = 30
 
 image_path = './img/' + datetime.now().strftime("%m.%d[T-%H%M%S]") + f'[SET-{windowS}.{searchS}.{thresh}]/'
 if not os.path.exists(image_path):
@@ -42,8 +45,8 @@ print("Done.)")
 
 ### Image Capture ###
 
-def CaptureImage():
-    global FirstFrame, LastFrame, OrigImage, image_path, camFocus
+def CaptureImages(interval:int=-1, cnt:int=2):
+    global Frames, image_path, camFocus, xMax, yMax, cropI
     
     capture = cv2.VideoCapture(camIndex, cv2.CAP_DSHOW)
                             
@@ -51,54 +54,80 @@ def CaptureImage():
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, yMax)
     capture.set(cv2.CAP_PROP_AUTOFOCUS, 0)
     capture.set(cv2.CAP_PROP_FOCUS, camFocus)
-    
+    capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+
     print(f"- Capturing")
     print(f"  - Index : {camIndex}")
     print(f"  - Resolution : {capture.get(cv2.CAP_PROP_FRAME_WIDTH)} * {capture.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
     print(f"  - Focus : {capture.get(cv2.CAP_PROP_FOCUS)}")
 
+    zoomRate = 100
+    # for i in range(0,n):
     while True:
+        ret, frame = capture.read()
+
+        #prepare the crop
+        centerX, centerY = int(yMax/2),int(xMax/2)
+        radiusX, radiusY = int(yMax/100*zoomRate/2), int(xMax/100*zoomRate/2)
+
+        lowerX, upperX = centerX-radiusX, centerX+radiusX
+        lowerY, upperY = centerY-radiusY, centerY+radiusY
+
+        cropped = frame[lowerX:upperX, lowerY:upperY]
+        resized_cropped = cv2.resize(cropped, (1920, 1080)) 
+        cv2.imshow('Frame 1', resized_cropped)
+
         inputKey = cv2.waitKey(33) 
+        
         if inputKey == ord("["):
             camFocus -= 5
             capture.set(cv2.CAP_PROP_FOCUS, camFocus)
-            print(f"          → {capture.get(cv2.CAP_PROP_FOCUS)}")
+            print(f" → Focus : {capture.get(cv2.CAP_PROP_FOCUS)}")
         if inputKey == ord("]"):
             camFocus += 5
             capture.set(cv2.CAP_PROP_FOCUS, camFocus)
-            print(f"          → {capture.get(cv2.CAP_PROP_FOCUS)}")
+            print(f" → Focus : {capture.get(cv2.CAP_PROP_FOCUS)}")
+        if inputKey == 61:
+            zoomRate -= 5
+            if(zoomRate==0):
+                zoomRate = 100
+            print(f" → Zoom Rate : {zoomRate}% / {radiusY*2} * {radiusX*2}")
+        if inputKey == 45:
+            zoomRate += 5
+            print(f" → Zoom Rate : {zoomRate}% / {radiusY*2} * {radiusX*2}")
         if inputKey == 13: #Enter
             break
-        ret, frame = capture.read()
-        cv2.imshow("VideoFrame", frame)
 
-    ret, FirstFrame = capture.read()
-    cv2.imshow("FirstFrame", FirstFrame)
-
-    print(f"  - Image 1 Captured")
-
-    while inputKey != 13: #Enter
-        ret, frame = capture.read()
-        cv2.imshow("VideoFrame", frame)
-
-    ret, LastFrame = capture.read()
-    print(f"  - Image 2 Captured")
-
-    capture.release()
+    a = cv2.imwrite(image_path +  f'{windowS}_{searchS}_{thresh}_1.jpg', cropped)
+    cropped = ConvertImage(cropped)
+    cropped = cropped.convert("L")
+    Frames.append(cropped)
+    cropI = [0,0,radiusY*2,radiusX*2]
+    print(f"  - Image 1 Captured") 
     cv2.destroyAllWindows()
 
-    a = cv2.imwrite(image_path +  'Image 1.jpg', FirstFrame)
-    b = cv2.imwrite(image_path +  'Image 2.jpg', LastFrame)
+    for i in range(2,cnt+1):
+        if interval > 0:
+            time.sleep(interval)
+            ret, frame = capture.read()
+            cropped = frame[lowerX:upperX, lowerY:upperY]
+        else:
+            while cv2.waitKey(33) != 13: #Enter
+                ret, frame = capture.read()
+                cropped = frame[lowerX:upperX, lowerY:upperY]
+                # resized_cropped = cv2.resize(cropped, (1920, 1080)) 
+                # cv2.imshow(f'Frame {i}', resized_cropped)
+        
+        b = cv2.imwrite(image_path +  f'{windowS}_{searchS}_{thresh}_{i}.jpg', cropped)
+        cropped = ConvertImage(cropped)
+        cropped = cropped.convert("L")
+        Frames.append(cropped)
+        print(f"  - Image {i} Captured")
+        a = a and b
 
-    FirstFrame = ConvertImage(FirstFrame)
-    LastFrame = ConvertImage(LastFrame)
+    capture.release()
 
-    OrigImage = LastFrame
-
-    FirstFrame = FirstFrame.convert("L")
-    LastFrame = LastFrame.convert("L")
-
-    print(f"  - Saved: {a and b}")
+    print(f"  - Saved: {a}")
 def ConvertImage(img):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return PIL.Image.fromarray(img)
@@ -106,9 +135,9 @@ def ConvertImage(img):
 ### Compute ###
 
 def Compute(I1Compute, I2Compute, wSize, sSize):
-    print("- Computing")
-    print(f"  - Window Size : {wSize}")
-    print(f"  - Search Size : {sSize}")
+    print("  - Computing")
+    print(f"    - Window Size : {wSize}")
+    print(f"    - Search Size : {sSize}")
 
     numRows_I = I1Compute.size[1]                                           # Number of rows of the image
     numCols_I = I1Compute.size[0]                                           # Number of columns of the image
@@ -134,7 +163,7 @@ def Compute(I1Compute, I2Compute, wSize, sSize):
     
     # Loop
     for i in range(len(wIndR)):                                             # Loop over all row window centers
-        print(f"  - Iteration {i}/{len(wIndR)-1} (", end='')                             # Print current iteration to console
+        print(f"    - Iteration {i}/{len(wIndR)-1} (", end='')                             # Print current iteration to console
         clean = True
         for j in range(len(wIndC)):                                         # Loop over all column window centers
             
@@ -262,8 +291,8 @@ def SetPlotOpt():
             contourType = ["X", "Y", "Total"][k]
             
         print("\n")
-def SetPlotData(thresh):
-    global quivX, quivY, quivU, quivV, quivVel
+def SetPlotData():
+    global quivX, quivY, quivU, quivV, quivVel, thresh
 
     # Get relevant instance variables          
     quivX    = copy.deepcopy(CC)                                       # Set X-values from column meshgrid
@@ -367,17 +396,18 @@ def Plot5(): # 5: TotDis
     plt.gca().set_aspect('equal')                                       # Set the axes equal
     plt.colorbar()                                                      # Show the colorbar
     plt.title('Total Displacement')                                     # Set the plot title
-def ShowPlot():
+def ShowPlot(index:str=""):
     global image_path
 
+    plotFileType = [0, 'V', 'T(C)', 'X', 'Y', 'T']
     plotType = [0, 'Velocity', 'Contour', 'X Displacement', 'Y Displacement', 'Total Displacement']
 
-    print("- Saving Plots")
+    print("  - Saving Plots")
 
-    for i in range(1, 6):
+    for i in [3, 5]: #range(1, 6)
         Plot(i)
-        plt.savefig(image_path + f"Plot - {plotType[i]}.jpg")
-        print(f"  - [{i}] {plotType[i]}")
+        plt.savefig(image_path + f"{windowS}_{searchS}_{thresh}_{plotFileType[i]}{index}.jpg")
+        print(f"    - [{i}] {plotType[i]}")
         if(plotShow[i]):
             if i != 1:
                 plt.close(1)
@@ -385,10 +415,12 @@ def ShowPlot():
         plt.close(i)
         time.sleep(0.5)
 
-CaptureImage()
-colOffset, rowOffset, CC, RR, XX, YY = Compute(FirstFrame, LastFrame, windowS, searchS)
+CaptureImages(0.5, cnt)
 # SetPlotOpt()
-SetPlotData(thresh)
-ShowPlot()
+for i in range(1, cnt): 
+    print(f"- [{i}/{cnt-1}] Processing Image {i} and Image {i+1}")
+    colOffset, rowOffset, CC, RR, XX, YY = Compute(Frames[i], Frames[i+1], windowS, searchS)
+    SetPlotData()
+    ShowPlot(str(i))
 
 print("\nEnd of Program.")
